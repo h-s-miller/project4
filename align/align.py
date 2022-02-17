@@ -130,8 +130,54 @@ class NeedlemanWunsch:
         self._seqA = seqA
         self._seqB = seqB
 
-        # TODO Implement the global sequence alignment here
-        pass
+        # Global sequence alignment
+        ### 1. Initialize the matrix
+        # The M matrix is 0 at [0,0] but -inf at [0,1:] [1:,0] so dont need to anything with those
+        self._align_matrix[0,0] = 0 
+
+        # The Y matrix is x number of gaps needed for alignment of the x-th subsequence of seqB with nothing
+        for i in range(len(self._seqA)+1):
+            self._gapB_matrix[i, 0] = self.gap_open + self.gap_extend * i
+
+        # The X matrix is x number of gaps needed for alignment of the x-th subsequence of seqA with nothing
+        for j in range(len(self._seqB)+1):
+            self._gapA_matrix[0, j] = self.gap_open + self.gap_extend * j
+
+
+        ###2. Fill in the rest of the matrix
+        for i in range(1,len(self._seqA)+1): #row-wise
+            for j in range(1,len(self._seqB)+1): #go column-wise
+                #compute match score
+                match_score=self.sub_dict[(self._seqA[i-1],self._seqB[j-1])]
+
+                ##2a. Fill in M
+                #M is the match(i,j) + max(M[i-1,j-1], X[i-1,j-1], Y[i-1,j-1]
+                max_fxn_align=[self._align_matrix[i-1,j-1],self._gapB_matrix[i-1,j-1],self._gapA_matrix[i-1,j-1]]
+                self._align_matrix[i,j]=match_score+max(max_fxn_align)
+                self._back[i,j]=np.argmax(max_fxn_align)
+
+                
+                ##2b. Fill in X
+                # X is max(gap_start+gap_extend+M[i-1,j],
+                #          gap_extend+X[i-1,j],
+                #          gap_start+gap_extend+Y[i-1,j]
+                max_fxn_gapA=[self.gap_open+self.gap_extend+self._align_matrix[i-1,j],
+                              self.gap_extend+self._gapA_matrix[i-1,j],
+                              self.gap_open+self.gap_extend+self._gapB_matrix[i-1,j]]
+                self._gapA_matrix[i,j]=max(max_fxn_gapA)
+                self._back_A[i,j]=np.argmax(max_fxn_gapA)
+
+                
+                ##2b. Fill in Y
+                # Y is max(gap_start+gap_extend+M[i,j-1],
+                #          gap_extend+Y[i,j-1],
+                #          gap_start+gap_extend+X[i,j-1]
+                
+                max_fxn_gapB=[self.gap_open+self.gap_extend+self._align_matrix[i,j-1],
+                              self.gap_extend+self._gapB_matrix[i,j-1],
+                              self.gap_open+self.gap_extend+self._gapA_matrix[i,j-1]]
+                self._gapB_matrix[i,j]=max(max_fxn_gapB)
+                self._back_B[i,j]=np.argmax(max_fxn_gapB)
 
         return self._backtrace()
 
@@ -142,10 +188,42 @@ class NeedlemanWunsch:
         The traceback method should return a tuple of the alignment
         score, the seqA alignment and the seqB alignment respectively.
         """
-        # Implement this method based upon the heuristic chosen in the align method above.
-        pass
+        last_row=len(self._seqA)
+        last_col=len(self._seqB)
 
+        final_scores=[self._align_matrix[last_row,last_col],
+                      self._gapA_matrix[last_row,last_col],
+                      self._gapB_matrix[last_row,last_col]]
 
+        self.alignment_score=max(final_scores)
+        max_idx=np.argmax(final_scores)
+
+        
+        while last_row>0 and last_col>0:
+            if max_idx==0:
+                self.seqA_align=self.seqA_align+self._seqA[last_row-1]
+                self.seqB_align=self.seqB_align+self._seqB[last_col-1]
+                max_idx=self._back[last_row,last_col]
+                last_row-=1
+                last_col-=1
+
+            elif max_idx==1:
+                self.seqA_align=self.seqA_align+'-'
+                self.seqB_align=self.seqB_align+self._seqB[last_col-1]
+                max_idx=self._back_A[last_row,last_col]
+                last_col-=1
+
+            else:
+                self.seqB_align=self.seqB_align+'-'
+                self.seqA_align=self.seqA_align+self._seqA[last_row-1]
+                max_idx=self._back_B[last_row,last_col]
+                last_row-=1
+
+        self.seqA_align=self.seqA_align[::-1]
+        self.seqB_align=self.seqB_align[::-1]
+
+        return self.alignment_score, self.seqA_align, self.seqB_align
+                
 def read_fasta(fasta_file: str) -> Tuple[str, str]:
     """
     DO NOT MODIFY THIS FUNCTION! IT IS ALREADY COMPLETE!
@@ -157,16 +235,17 @@ def read_fasta(fasta_file: str) -> Tuple[str, str]:
     file if multiple are provided.
 
     Parameters:
-        fasta_file: str
+       fasta_file: str
             name (and associated path if not in current working directory)
             of the Fasta file.
 
-    Returns:
+     Returns:
         seq: str
             String of characters from FASTA file
         header: str
             Fasta header
     """
+        
     assert fasta_file.endswith(".fa"), "Fasta file must be a fasta file with the suffix .fa"
     with open(fasta_file) as f:
         seq = ""  # initializing sequence
@@ -177,10 +256,26 @@ def read_fasta(fasta_file: str) -> Tuple[str, str]:
             if is_header and first_header:
                 header = line.strip()  # reading in fasta header
                 first_header = False
-            # Reading in the sequence line by line
+                # Reading in the sequence line by line
             elif not is_header:
                 seq += line.strip().upper()  # generating full sequence
-            # Breaking if more than one header is provided in the fasta file
+                # Breaking if more than one header is provided in the fasta file
             elif is_header and not first_header:
                 break
     return seq, header
+"""
+def main():
+    seq1, _ = read_fasta("../data/test_seq1.fa")
+    seq2, _ = read_fasta("../data/test_seq2.fa")
+
+    gap_open=-10
+    gap_extend=-1
+
+    nw=NeedlemanWunsch("../substitution_matrices/BLOSUM62.mat", gap_open, gap_extend)
+    alignment_score,aligned_seq3,aligned_seq4=nw.align(seq1,seq2)
+    print(alignment_score)
+    print(aligned_seq3)
+    print(aligned_seq4)
+main()
+B
+"""
