@@ -263,19 +263,3 @@ def read_fasta(fasta_file: str) -> Tuple[str, str]:
             elif is_header and not first_header:
                 break
     return seq, header
-"""
-def main():
-    seq1, _ = read_fasta("../data/test_seq1.fa")
-    seq2, _ = read_fasta("../data/test_seq2.fa")
-
-    gap_open=-10
-    gap_extend=-1
-
-    nw=NeedlemanWunsch("../substitution_matrices/BLOSUM62.mat", gap_open, gap_extend)
-    alignment_score,aligned_seq3,aligned_seq4=nw.align(seq1,seq2)
-    print(alignment_score)
-    print(aligned_seq3)
-    print(aligned_seq4)
-main()
-B
-"""
